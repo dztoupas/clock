@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<title>ExamTimer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234d9eff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='13' r='8'/%3E%3Cpath d='M12 9v4l2.5 2.5'/%3E%3Cpath d='M9 1h6'/%3E%3Cpath d='M19.07 4.93l-1.41 1.41'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#050a18;
+    --bg-soft:#0e1a33;
+    --accent:#4d9eff;
+    --accent-soft:#16294d;
+    --text:#ffffff;
+    --text-dim:#8fa3c7;
+    --danger:#ff6b6b;
+    --ring-bg:#152544;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:radial-gradient(circle at 50% 18%, #0c1c3c 0%, var(--bg) 65%);
+    color:var(--text);
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    display:flex;
+    align-items:flex-start;
+    align-items:safe center;
+    justify-content:center;
+    min-height:100vh;
+    min-height:100dvh;
+    overflow-x:hidden;
+    overflow-y:auto;
+    -webkit-text-size-adjust:100%;
+    user-select:none;
+    padding-top:env(safe-area-inset-top);
+    padding-bottom:env(safe-area-inset-bottom);
+    padding-left:env(safe-area-inset-left);
+    padding-right:env(safe-area-inset-right);
+  }
+
+  .app{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:28px;
+    padding:28px 40px;
+    width:100%;
+    max-width:none;
+  }
+
+  .title{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    font-size:13px;
+    letter-spacing:4px;
+    text-transform:uppercase;
+    color:var(--text-dim);
+    font-weight:600;
+  }
+  .title svg{
+    width:18px;
+    height:18px;
+    stroke:var(--accent);
+    flex-shrink:0;
+  }
+
+  /* Grid keeps the ring mathematically centered on the page:
+     two equal flexible side columns + an auto column sized to the ring.
+     The panel is pinned to the far edge of the right column. */
+  .main-row{
+    display:grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items:center;
+    width:100%;
+  }
+
+  /* --- Ring / Display --- */
+  .ring-wrap{
+    position:relative;
+    grid-column:2;
+    justify-self:center;
+    width:min(88vh, 60vw, 820px);
+    height:min(88vh, 60vw, 820px);
+    flex-shrink:0;
+  }
+  svg.ring{
+    width:100%;
+    height:100%;
+    transform:rotate(-90deg);
+  }
+  .ring-bg{
+    fill:none;
+    stroke:var(--ring-bg);
+    stroke-width:6;
+  }
+  .ring-progress{
+    fill:none;
+    stroke:var(--accent);
+    stroke-width:6;
+    stroke-linecap:round;
+    transition:stroke-dashoffset 0.25s linear, stroke 0.4s ease;
+  }
+  .ring-progress.warning{
+    stroke:var(--danger);
+  }
+
+  .display{
+    position:absolute;
+    inset:0;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+  }
+
+  .time-readout{
+    font-size:clamp(3.6rem, 15vh, 8.4rem);
+    font-weight:200;
+    letter-spacing:1px;
+    font-variant-numeric:tabular-nums;
+    line-height:1;
+    white-space:nowrap;
+  }
+  .time-readout.flash{
+    color:var(--danger);
+    animation:flash 1s step-start infinite;
+  }
+  @keyframes flash{
+    50%{opacity:0.25;}
+  }
+
+  .status-label{
+    font-size:11px;
+    letter-spacing:3px;
+    text-transform:uppercase;
+    color:var(--text-dim);
+  }
+
+  /* --- Side panel (settings pinned to the far right of the page) --- */
+  .side-panel{
+    grid-column:3;
+    justify-self:end;
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:36px;
+    width:min(260px, 80vw);
+    flex-shrink:0;
+    margin-right:8px;
+  }
+  .side-panel .setup{
+    flex-direction:column;
+    align-items:stretch;
+    gap:22px;
+  }
+  .side-panel .setup .field{
+    align-items:stretch;
+  }
+  .side-panel .setup .field label{
+    text-align:left;
+    padding-left:4px;
+  }
+  .side-panel .setup .colon-sep{
+    display:none;
+  }
+  .side-panel .stepper{
+    justify-content:space-between;
+  }
+  .side-panel .presets{
+    justify-content:space-between;
+  }
+  .side-panel .preset-btn{
+    flex:1;
+    text-align:center;
+  }
+  .side-panel .controls{
+    flex-direction:column;
+    width:100%;
+  }
+  .side-panel .controls .btn{
+    width:100%;
+  }
+
+  /* --- Setup (inputs) --- */
+  .setup{
+    display:flex;
+    align-items:center;
+    gap:18px;
+  }
+  .field{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:8px;
+  }
+  .field label{
+    font-size:10px;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--text-dim);
+  }
+  .stepper{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    background:var(--bg-soft);
+    border-radius:14px;
+    padding:6px;
+  }
+  .stepper button{
+    width:34px;
+    height:34px;
+    border-radius:10px;
+    border:none;
+    background:transparent;
+    color:var(--text-dim);
+    font-size:18px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:background 0.15s ease, color 0.15s ease;
+  }
+  .stepper button:hover{
+    background:var(--accent-soft);
+    color:var(--accent);
+  }
+  .stepper input{
+    width:54px;
+    text-align:center;
+    background:transparent;
+    border:none;
+    color:var(--text);
+    font-size:22px;
+    font-weight:300;
+    font-variant-numeric:tabular-nums;
+    outline:none;
+  }
+  .stepper input::-webkit-outer-spin-button,
+  .stepper input::-webkit-inner-spin-button{
+    -webkit-appearance:none;
+    margin:0;
+  }
+  .colon-sep{
+    font-size:22px;
+    color:var(--text-dim);
+    font-weight:200;
+    margin-top:18px;
+  }
+
+  .presets{
+    display:flex;
+    gap:6px;
+  }
+  .preset-btn{
+    border:1px solid #232936;
+    background:var(--bg-soft);
+    color:var(--text-dim);
+    font-size:11px;
+    letter-spacing:0.5px;
+    padding:5px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    font-variant-numeric:tabular-nums;
+    transition:background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .preset-btn:hover{
+    background:var(--accent-soft);
+    color:var(--accent);
+    border-color:var(--accent-soft);
+  }
+  .preset-btn.active{
+    background:var(--accent-soft);
+    color:var(--accent);
+    border-color:var(--accent);
+  }
+
+  /* --- Controls --- */
+  .controls{
+    display:flex;
+    gap:14px;
+  }
+  .btn{
+    border:none;
+    border-radius:999px;
+    padding:14px 30px;
+    font-size:13px;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    font-weight:600;
+    cursor:pointer;
+    transition:transform 0.12s ease, opacity 0.15s ease, background 0.15s ease;
+  }
+  .btn:active{transform:scale(0.96);}
+  .btn-primary{
+    background:var(--accent);
+    color:#ffffff;
+    box-shadow:0 4px 18px rgba(77,158,255,0.35);
+  }
+  .btn-primary:hover{opacity:0.9;}
+  .btn-secondary{
+    background:var(--bg-soft);
+    color:var(--text);
+    border:1px solid #232936;
+  }
+  .btn-secondary:hover{background:#161b24;}
+  .btn-secondary:disabled{
+    opacity:0.35;
+    cursor:not-allowed;
+  }
+  .btn-secondary:disabled:hover{background:var(--bg-soft);}
+
+  .icon-btn{
+    position:fixed;
+    top:24px;
+    right:24px;
+    width:42px;
+    height:42px;
+    border-radius:50%;
+    border:1px solid #232936;
+    background:var(--bg-soft);
+    color:var(--text-dim);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    transition:color 0.15s ease, border-color 0.15s ease;
+  }
+  .icon-btn:hover{
+    color:var(--accent);
+    border-color:var(--accent-soft);
+  }
+  .icon-btn svg{
+    width:18px;
+    height:18px;
+  }
+
+  body:fullscreen .app{ gap:56px; }
+  body:fullscreen .ring-wrap{ width:min(92vh, 64vw, 920px); height:min(92vh, 64vw, 920px); }
+
+  /* --- Tablet / narrow desktop: stack the ring above the settings --- */
+  @media (max-width:860px){
+    .app{ padding:64px 20px 24px; gap:24px; }
+    .main-row{ display:flex; flex-direction:column; gap:32px; }
+    .ring-wrap{ grid-column:auto; justify-self:auto; width:min(70vh, calc(100vw - 48px), 440px); height:min(70vh, calc(100vw - 48px), 440px); }
+    .side-panel{ grid-column:auto; justify-self:auto; margin-right:0; width:100%; max-width:440px; align-items:center; }
+    .side-panel .setup{ flex-direction:row; align-items:center; }
+    .side-panel .setup .colon-sep{ display:block; }
+    .side-panel .controls{ flex-direction:row; }
+  }
+
+  /* --- Phones in portrait: hours/minutes stay side by side, buttons stay side by side --- */
+  @media (max-width:480px){
+    .app{ padding:60px 16px 20px; gap:20px; }
+    .title{ font-size:12px; gap:8px; }
+    .title svg{ width:16px; height:16px; }
+    .ring-wrap{ width:min(60vh, calc(100vw - 40px), 320px); height:min(60vh, calc(100vw - 40px), 320px); }
+    .time-readout{ font-size:clamp(2.1rem, 12vw, 3.2rem); }
+    .status-label{ font-size:10px; }
+
+    .side-panel{ gap:18px; width:100%; max-width:340px; }
+    .side-panel .setup{ flex-direction:row; align-items:center; justify-content:center; gap:10px; }
+    .side-panel .setup .field{ flex:1; min-width:0; }
+    .side-panel .setup .colon-sep{ display:block; font-size:18px; margin-top:14px; }
+    .side-panel .setup .field label{ font-size:9px; text-align:center; padding-left:0; }
+
+    .side-panel .stepper{ padding:4px; gap:4px; }
+    .side-panel .stepper button{ width:28px; height:28px; font-size:16px; flex-shrink:0; }
+    .side-panel .stepper input{ flex:1 1 auto; width:auto; min-width:0; font-size:18px; }
+
+    .side-panel .presets{ gap:4px; }
+    .side-panel .preset-btn{ padding:5px 4px; font-size:10px; }
+
+    .side-panel .controls{ flex-direction:row; width:100%; gap:10px; }
+    .controls{flex-direction:row; width:100%; gap:10px;}
+    .btn{flex:1; padding:13px 10px; font-size:11px; letter-spacing:0.8px;}
+    .icon-btn{ top:16px; right:16px; width:38px; height:38px; }
+    .icon-btn svg{ width:16px; height:16px; }
+  }
+
+  /* --- Phones in landscape (short viewport height): keep ring + panel side by side --- */
+  @media (max-height:480px) and (orientation:landscape){
+    .app{ padding:14px 20px; gap:14px; }
+    .title{ font-size:11px; }
+    .main-row{ display:grid; grid-template-columns:1fr auto 1fr; flex-direction:row; gap:0; }
+    .ring-wrap{ grid-column:2; justify-self:center; width:min(72vh, 38vw, 360px); height:min(72vh, 38vw, 360px); }
+    .time-readout{ font-size:clamp(1.8rem, 9vh, 3rem); }
+    .side-panel{ grid-column:3; justify-self:end; width:min(220px, 34vw); gap:14px; margin-right:4px; }
+    .side-panel .setup{ flex-direction:column; gap:10px; }
+    .side-panel .setup .colon-sep{ display:none; }
+    .side-panel .controls{ flex-direction:column; gap:8px; }
+    .btn{ padding:10px 18px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="icon-btn" id="fullscreenBtn" title="Πλήρης οθόνη">
+  <svg id="fsIconExpand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15 3 21 3 21 9"></polyline>
+    <polyline points="9 21 3 21 3 15"></polyline>
+    <line x1="21" y1="3" x2="14" y2="10"></line>
+    <line x1="3" y1="21" x2="10" y2="14"></line>
+  </svg>
+  <svg id="fsIconCollapse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;">
+    <polyline points="4 14 10 14 10 20"></polyline>
+    <polyline points="20 10 14 10 14 4"></polyline>
+    <line x1="14" y1="10" x2="21" y2="3"></line>
+    <line x1="3" y1="21" x2="10" y2="14"></line>
+  </svg>
+</div>
+
+<div class="app">
+  <div class="title">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="13" r="8"></circle>
+      <path d="M12 9v4l2.5 2.5"></path>
+      <path d="M9 1h6"></path>
+      <path d="M19.07 4.93l-1.41 1.41"></path>
+    </svg>
+    ExamTimer
+  </div>
+
+  <div class="main-row">
+    <div class="ring-wrap">
+      <svg class="ring" viewBox="0 0 200 200">
+        <circle class="ring-bg" cx="100" cy="100" r="92"></circle>
+        <circle class="ring-progress" id="ringProgress" cx="100" cy="100" r="92"
+                stroke-dasharray="578.05" stroke-dashoffset="0"></circle>
+      </svg>
+      <div class="display">
+        <div class="time-readout" id="timeReadout">00:00:00</div>
+        <div class="status-label" id="statusLabel">Έτοιμο</div>
+      </div>
+    </div>
+
+    <div class="side-panel">
+      <div class="setup" id="setupRow">
+        <div class="field">
+          <label for="hoursInput">Ώρες</label>
+          <div class="stepper">
+            <button type="button" id="hMinus">−</button>
+            <input type="number" id="hoursInput" min="0" max="23" value="0" inputmode="numeric">
+            <button type="button" id="hPlus">+</button>
+          </div>
+          <div class="presets" id="hourPresets">
+            <button type="button" class="preset-btn" data-hours="1">1</button>
+            <button type="button" class="preset-btn" data-hours="2">2</button>
+            <button type="button" class="preset-btn" data-hours="3">3</button>
+          </div>
+        </div>
+        <div class="colon-sep">:</div>
+        <div class="field">
+          <label for="minutesInput">Λεπτά</label>
+          <div class="stepper">
+            <button type="button" id="mMinus">−</button>
+            <input type="number" id="minutesInput" min="0" max="59" value="0" inputmode="numeric">
+            <button type="button" id="mPlus">+</button>
+          </div>
+          <div class="presets" id="minutePresets">
+            <button type="button" class="preset-btn" data-minutes="0">0</button>
+            <button type="button" class="preset-btn" data-minutes="15">15</button>
+            <button type="button" class="preset-btn" data-minutes="30">30</button>
+            <button type="button" class="preset-btn" data-minutes="45">45</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <button class="btn btn-primary" id="startPauseBtn">Έναρξη</button>
+        <button class="btn btn-secondary" id="resetBtn" disabled>Επαναφορά</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<audio id="alarmSound" preload="auto">
+  <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=" type="audio/wav">
+</audio>
+
+<script>
+(function(){
+  const hoursInput = document.getElementById('hoursInput');
+  const minutesInput = document.getElementById('minutesInput');
+  const hMinus = document.getElementById('hMinus');
+  const hPlus = document.getElementById('hPlus');
+  const mMinus = document.getElementById('mMinus');
+  const mPlus = document.getElementById('mPlus');
+  const startPauseBtn = document.getElementById('startPauseBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const timeReadout = document.getElementById('timeReadout');
+  const statusLabel = document.getElementById('statusLabel');
+  const ringProgress = document.getElementById('ringProgress');
+  const fullscreenBtn = document.getElementById('fullscreenBtn');
+  const fsIconExpand = document.getElementById('fsIconExpand');
+  const fsIconCollapse = document.getElementById('fsIconCollapse');
+  const setupRow = document.getElementById('setupRow');
+
+  const CIRC = 2 * Math.PI * 92; // 578.05
+  ringProgress.setAttribute('stroke-dasharray', CIRC.toFixed(2));
+
+  let totalSeconds = 0;
+  let remainingSeconds = 0;
+  let timerId = null;
+  let running = false;
+  let endTimestamp = null;
+
+  function clampInt(val, min, max){
+    val = parseInt(val, 10);
+    if(isNaN(val)) val = min;
+    return Math.min(max, Math.max(min, val));
+  }
+
+  function formatTime(secs){
+    secs = Math.max(0, secs);
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.floor(secs % 60);
+    return [h, m, s].map(n => String(n).padStart(2, '0')).join(':');
+  }
+
+  function updateDisplay(){
+    timeReadout.textContent = formatTime(remainingSeconds);
+    const fraction = totalSeconds > 0 ? remainingSeconds / totalSeconds : 0;
+    const offset = CIRC * (1 - fraction);
+    ringProgress.style.strokeDashoffset = offset.toFixed(2);
+
+    const lowTime = totalSeconds > 0 && remainingSeconds <= Math.min(10, totalSeconds);
+    ringProgress.classList.toggle('warning', running && lowTime && remainingSeconds > 0);
+    timeReadout.classList.toggle('flash', remainingSeconds === 0 && totalSeconds > 0);
+  }
+
+  function setInputsEnabled(enabled){
+    hoursInput.disabled = !enabled;
+    minutesInput.disabled = !enabled;
+    hMinus.disabled = mMinus.disabled = hPlus.disabled = mPlus.disabled = !enabled;
+    setupRow.style.opacity = enabled ? '1' : '0.4';
+    setupRow.style.pointerEvents = enabled ? 'auto' : 'none';
+  }
+
+  function refreshPresetHighlight(){
+    document.querySelectorAll('#hourPresets .preset-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.hours, 10) === clampInt(hoursInput.value, 0, 23));
+    });
+    document.querySelectorAll('#minutePresets .preset-btn').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.minutes, 10) === clampInt(minutesInput.value, 0, 59));
+    });
+  }
+
+  function getInputSeconds(){
+    const h = clampInt(hoursInput.value, 0, 23);
+    const m = clampInt(minutesInput.value, 0, 59);
+    return h * 3600 + m * 60;
+  }
+
+  function tick(){
+    const now = Date.now();
+    const secsLeft = Math.round((endTimestamp - now) / 1000);
+    remainingSeconds = Math.max(0, secsLeft);
+    updateDisplay();
+    if(remainingSeconds <= 0){
+      finishCountdown();
+    }
+  }
+
+  function finishCountdown(){
+    clearInterval(timerId);
+    timerId = null;
+    running = false;
+    remainingSeconds = 0;
+    updateDisplay();
+    statusLabel.textContent = 'Ο χρόνος έληξε';
+    startPauseBtn.textContent = 'Έναρξη';
+    resetBtn.disabled = false;
+    playAlarm();
+    if (document.title.indexOf('⏰') !== 0) {
+      document.title = '⏰ ' + document.title;
+    }
+  }
+
+  function playAlarm(){
+    try{
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const playBeep = (startDelay) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + startDelay);
+        gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + startDelay + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + startDelay + 0.35);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(ctx.currentTime + startDelay);
+        osc.stop(ctx.currentTime + startDelay + 0.4);
+      };
+      [0, 0.5, 1.0].forEach(playBeep);
+    }catch(e){ /* audio not available */ }
+  }
+
+  function startTimer(){
+    if(!running && remainingSeconds === 0){
+      totalSeconds = getInputSeconds();
+      if(totalSeconds <= 0){
+        statusLabel.textContent = 'Ορίστε χρόνο πρώτα';
+        return;
+      }
+      remainingSeconds = totalSeconds;
+    }
+    document.title = document.title.replace('⏰ ', '');
+    running = true;
+    endTimestamp = Date.now() + remainingSeconds * 1000;
+    setInputsEnabled(false);
+    startPauseBtn.textContent = 'Παύση';
+    resetBtn.disabled = false;
+    statusLabel.textContent = 'Μέτρηση σε εξέλιξη';
+    timerId = setInterval(tick, 200);
+    updateDisplay();
+  }
+
+  function pauseTimer(){
+    running = false;
+    clearInterval(timerId);
+    timerId = null;
+    startPauseBtn.textContent = 'Συνέχεια';
+    statusLabel.textContent = 'Σε παύση';
+  }
+
+  function resetTimer(){
+    running = false;
+    clearInterval(timerId);
+    timerId = null;
+    remainingSeconds = 0;
+    totalSeconds = 0;
+    ringProgress.classList.remove('warning');
+    timeReadout.classList.remove('flash');
+    document.title = document.title.replace('⏰ ', '');
+    setInputsEnabled(true);
+    startPauseBtn.textContent = 'Έναρξη';
+    resetBtn.disabled = true;
+    statusLabel.textContent = 'Έτοιμο';
+    timeReadout.textContent = formatTime(getInputSeconds());
+    ringProgress.style.strokeDashoffset = '0';
+  }
+
+  startPauseBtn.addEventListener('click', () => {
+    if(running){
+      pauseTimer();
+    } else {
+      startTimer();
+    }
+  });
+
+  resetBtn.addEventListener('click', resetTimer);
+
+  [hoursInput, minutesInput].forEach(inp => {
+    inp.addEventListener('input', () => {
+      if(!running && remainingSeconds === 0){
+        timeReadout.textContent = formatTime(getInputSeconds());
+      }
+      refreshPresetHighlight();
+    });
+    inp.addEventListener('blur', () => {
+      const min = parseInt(inp.min, 10), max = parseInt(inp.max, 10);
+      inp.value = clampInt(inp.value, min, max);
+      if(!running && remainingSeconds === 0){
+        timeReadout.textContent = formatTime(getInputSeconds());
+      }
+      refreshPresetHighlight();
+    });
+  });
+
+  hMinus.addEventListener('click', () => { hoursInput.value = clampInt(+hoursInput.value - 1, 0, 23); hoursInput.dispatchEvent(new Event('input')); });
+  hPlus.addEventListener('click', () => { hoursInput.value = clampInt(+hoursInput.value + 1, 0, 23); hoursInput.dispatchEvent(new Event('input')); });
+  mMinus.addEventListener('click', () => { minutesInput.value = clampInt(+minutesInput.value - 1, 0, 59); minutesInput.dispatchEvent(new Event('input')); });
+  mPlus.addEventListener('click', () => { minutesInput.value = clampInt(+minutesInput.value + 1, 0, 59); minutesInput.dispatchEvent(new Event('input')); });
+
+  document.querySelectorAll('#hourPresets .preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if(hoursInput.disabled) return;
+      hoursInput.value = btn.dataset.hours;
+      hoursInput.dispatchEvent(new Event('input'));
+    });
+  });
+  document.querySelectorAll('#minutePresets .preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if(minutesInput.disabled) return;
+      minutesInput.value = btn.dataset.minutes;
+      minutesInput.dispatchEvent(new Event('input'));
+    });
+  });
+
+  // Fullscreen toggle
+  function isFullscreen(){
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function updateFsIcon(){
+    if(isFullscreen()){
+      fsIconExpand.style.display = 'none';
+      fsIconCollapse.style.display = 'block';
+    } else {
+      fsIconExpand.style.display = 'block';
+      fsIconCollapse.style.display = 'none';
+    }
+  }
+
+  fullscreenBtn.addEventListener('click', () => {
+    if(!isFullscreen()){
+      const el = document.documentElement;
+      (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+    } else {
+      (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    }
+  });
+
+  document.addEventListener('fullscreenchange', updateFsIcon);
+  document.addEventListener('webkitfullscreenchange', updateFsIcon);
+
+  // Keyboard shortcuts: space = start/pause, r = reset, f = fullscreen
+  document.addEventListener('keydown', (e) => {
+    if(document.activeElement === hoursInput || document.activeElement === minutesInput) return;
+    if(e.code === 'Space'){
+      e.preventDefault();
+      startPauseBtn.click();
+    } else if(e.key === 'r' || e.key === 'R'){
+      if(!resetBtn.disabled) resetTimer();
+    } else if(e.key === 'f' || e.key === 'F'){
+      fullscreenBtn.click();
+    }
+  });
+
+  // init display
+  timeReadout.textContent = formatTime(getInputSeconds());
+  refreshPresetHighlight();
+})();
+</script>
+
+</body>
+</html>
